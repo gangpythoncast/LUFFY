@@ -1,0 +1,120 @@
+name: temp-todo-dump
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate chunked dump
+        run: |
+          mkdir -p /tmp/work
+          cat > /tmp/work/dump.py <<'PYEOF'
+          import os, subprocess
+
+          REPO = os.environ["GITHUB_WORKSPACE"]
+          os.chdir(REPO)
+          BASE = ".dump"
+
+          def chunked_dump(rel, data, size=6000):
+              d = os.path.join(BASE, rel)
+              os.makedirs(d, exist_ok=True)
+              if isinstance(data, str):
+                  data = data.encode("utf-8")
+              # split on line boundaries where possible
+              lines = data.splitlines(keepends=True)
+              buf = b""
+              idx = 1
+              def flush(buf, idx):
+                  name = os.path.join(d, "part_%03d.txt" % idx)
+                  with open(name, "wb") as f:
+                      f.write(buf)
+              for ln in lines:
+                  if len(buf) + len(ln) > size and buf:
+                      flush(buf, idx); idx += 1; buf = b""
+                  if len(ln) > size:
+                      for i in range(0, len(ln), size):
+                          piece = ln[i:i+size]
+                          if len(buf) + len(piece) > size and buf:
+                              flush(buf, idx); idx += 1; buf = b""; idx += 1
+                          buf += piece
+                  else:
+                      buf += ln
+              if buf:
+                  flush(buf, idx)
+
+          # 1. README bytes (identical on main/dev)
+          with open("README.md", "rb") as f:
+              chunked_dump("readme", f.read())
+
+          # 2. Full TODO scan of dev working tree, sorted path then line
+          records = []
+          for dp, dns, fns in os.walk("."):
+              if dp.startswith("./.git") or dp.startswith("./.dump"):
+                  continue
+              for fn in fns:
+                  if not fn.endswith(".py"):
+                      continue
+                  p = os.path.join(dp, fn).replace(os.sep, "/")
+                  if p.startswith("./"):
+                      p = p[2:]
+                  try:
+                      with open(p, "r", encoding="utf-8") as f:
+                          for i, line in enumerate(f, 1):
+                              if "TODO" in line:
+                                  records.append((p, i, line.rstrip("\n")))
+                  except Exception as e:
+                      records.append((p, -1, "SCAN-ERROR %r" % e))
+          records.sort(key=lambda r: (r[0], r[1]))
+          out = "".join("%s:%d:%s\n" % r for r in records)
+          chunked_dump("todos_dev", out)
+
+          # 3. TODO scan of main via git grep
+          mg = subprocess.run(
+              ["git", "grep", "-n", "-I", "TODO", "main", "--", "*.py"],
+              capture_output=True, text=True)
+          main_out = mg.stdout
+          chunked_dump("todos_main", main_out)
+
+          # 4. The two changed protocol file at dev for exact checks
+          with open("luffy/verl/verl/protocol.py", "rb") as f:
+              chunked_dump("protocol_dev", f.read())
+          with open("luffy/verl/verl/protocol.py", "rb") as f:
+              pass
+          mp = subprocess.run(
+              ["git", "show", "main:luffy/verl/verl/protocol.py"],
+              capture_output=True)
+          chunked_dump("protocol_main", mp.stdout)
+          mu = subprocess.run(
+              ["git", "show", "main:luffy/deepscaler/utils.py"],
+              capture_output=True)
+          chunked_dump("utils_main", mu.stdout)
+          du = subprocess.run(
+              ["git", "show", "dev:luffy/deepscaler/utils.py"],
+              capture_output=True)
+          chunked_dump("utils_dev", du.stdout)
+
+          print("records", len(records))
+          PYEOF
+          python3 /tmp/work/dump.py
+          find .dump -type f | sort | xargs -I{} sh -c 'echo "{} $(wc -c < {})"'
+      - name: Push dump branch
+        run: |
+          git config user.name "temp-dump-bot"
+          git config user.email "temp-dump-bot@users.noreply.github.com"
+          git add .dump
+          git commit -m "temp: chunked readme and todo dump"
+          git fetch origin temp/todo-scan
+          git branch -f temp/todo-scan HEAD
+          git push origin +temp/todo-scan
