@@ -1,0 +1,16 @@
+MODE=apply
+baseline_entries=226 final_entries=215
+changed=['luffy/deepscaler/utils.py', 'luffy/verl/verl/protocol.py']
+FILE luffy/deepscaler/utils.py {'old_markers': 16, 'new_markers': 11, 'baseline_entries': 16, 'deleted_entries': 5, 'updated_entries': 11, 'inserted_entries': 0}
+FILE luffy/verl/verl/protocol.py {'old_markers': 13, 'new_markers': 7, 'baseline_entries': 13, 'deleted_entries': 6, 'updated_entries': 7, 'inserted_entries': 0}
+PASS title_unique matches=1
+PASS sorted entries=215
+PASS no_duplicate_keys 
+PASS entry_count got=215 expected=215 baseline=226
+PASS unchanged_preserved old=197 new=197
+PASS final_matches_scan:luffy/deepscaler/utils.py final=11 scan=11
+PASS final_matches_scan:luffy/verl/verl/protocol.py final=7 scan=7
+PASS title_kept 
+PASS expected_removed_set missing=[] extra=[]
+PASS expected_moves_subset missing=[]
+PASS no_inserts 
