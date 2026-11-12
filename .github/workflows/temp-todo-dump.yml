@@ -27,23 +27,34 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run TODO README transform
-        id: run
         env:
           MODE: ${{ github.event.inputs.mode }}
-        run: python3 .github/apply_todo_readme.py
-      - name: Show report
-        if: always()
         run: |
-          echo "===== REPORT ====="
-          cat .apply_report/report.txt 2>/dev/null || true
-          echo "===== DIFF (head) ====="
-          head -c 11000 .apply_report/README.diff 2>/dev/null || true
+          set +e
+          mkdir -p .apply_report
+          {
+            echo "== versions =="
+            python3 --version
+            echo "== branches =="
+            git branch -a
+            echo "== origin/main =="
+            git rev-parse origin/main
+            echo "== head =="
+            git rev-parse HEAD
+            echo "== mode =="
+            echo "$MODE"
+          } > .apply_report/diag.txt 2>&1
+          python3 .github/apply_todo_readme.py > .apply_report/run_stdout.txt 2> .apply_report/run_stderr.txt
+          echo "python_exit=$?" > .apply_report/exit_code.txt
+          exit 0
       - name: Publish report branch
         if: always()
         run: |
+          set +e
           git config user.name gangpythoncast
           git config user.email lindaphillipse286@gmail.com
           git checkout -B temp/apply-report
           git add -f .apply_report
           git commit -m "temp: apply report" --allow-empty
           git push -f origin temp/apply-report
+          exit 0
