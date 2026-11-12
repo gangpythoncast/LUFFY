@@ -1,0 +1,23 @@
+name: temp-todo-dump
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+      - run: |
+          echo hello > dump.txt
+          git config user.name temp-dump-bot
+          git config user.email temp-dump-bot@users.noreply.github.com
+          git add dump.txt
+          git commit -m "temp dump test"
+          git push origin HEAD:temp/todo-scan
