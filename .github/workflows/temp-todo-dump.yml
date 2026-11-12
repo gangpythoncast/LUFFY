@@ -26,6 +26,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Patch helper for real run
+        run: |
+          python3 - <<'PY'
+          p = ".github/apply_todo_readme.py"
+          s = open(p, encoding="utf-8").read()
+          repls = [
+            ('diff = git("diff", "--name-only", "origin/main...HEAD", "--", "*.py")',
+             'diff = git("diff", "--name-only", "origin/main...HEAD")'),
+            ('changed = [p for p in diff.stdout.splitlines() if p.endswith(".py")]',
+             'changed = [p for p in diff.stdout.splitlines() if p.endswith(".py") and not p.startswith(".") and "/." not in p]'),
+            ('    old_data = git("show", "origin/main:%s" % path).stdout\n    with open(path, "rb") as f:\n        new_data = f.read()',
+             '    _exists = git("cat-file", "-e", "origin/main:%s" % path, check=False)\n    old_data = git("show", "origin/main:%s" % path).stdout if _exists.returncode == 0 else ""\n    new_data = open(path, "rb").read() if os.path.exists(path) else b""'),
+          ]
+          ok = True
+          for old, new in repls:
+              if old not in s:
+                  print("MISSING PATTERN:", old[:80])
+                  ok = False
+              s = s.replace(old, new)
+          open(p, "w", encoding="utf-8").write(s)
+          print("patch_ok=", ok)
+          assert ok
+          PY
       - name: Run TODO README transform
         env:
           MODE: ${{ github.event.inputs.mode }}
@@ -35,8 +58,6 @@ jobs:
           {
             echo "== versions =="
             python3 --version
-            echo "== branches =="
-            git branch -a
             echo "== origin/main =="
             git rev-parse origin/main
             echo "== head =="
